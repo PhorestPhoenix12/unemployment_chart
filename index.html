@@ -1,8 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unit 1</title>
+   <link rel="stylesheet" type="text/css" href="style.css">
+    <script>
+        // Js to give active class to the nav link
+        document.addEventListener("DOMContentLoaded", function() {
+            var links = document.querySelectorAll("nav ul li a");
+            var currentFile = window.location.pathname.split("/").pop();
 
+            for (var i = 0; i < links.length; i++) {
+                var linkFile = links[i].href.split("/").pop();
+                if (linkFile === currentFile) {
+                    links[i].classList.add("active");
+                }
+            }
+        });
+    </script>
 </head>
+<body>
+    <header id="top">
+        <h1 class="welcome-head" style="color: #fff;">Unit 1: Basic Economic Concepts</h1>
+        <h2 class="welcome-head" style="color: #fff;"></h2>
+        <nav>
+            
+        </nav>
+    </header>
+  
+  <style>
+* {
+  box-sizing: border-box;
+}
+
+/* Create two equal columns that floats next to each other */
+
+
+/* Clear floats after the columns */
+html {
+  scroll-behavior: smooth;
+}
+
+/* FRED Graphs
+  Header/title
+  Graph centered
+  Blurb*/
+</style>
+
+<!--Anchor Links-->
+
+
+
+
+
+
+
+ <footer>
+        <p>&copy; 2024 APMacroCharts. All rights reserved.</p>
+    </footer>
+  
+</body>
 </html>
