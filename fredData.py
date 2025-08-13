@@ -1,60 +1,220 @@
-# data_fetch.py
-import requests
-import os
-from datetime import datetime
+!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-# ==== CONFIG ====
-FRED_API_KEY = os.getenv("FRED_API_KEY")  # Set this in GitHub Secrets
-FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
-STATE_SERIES = {
-    "CA": "CAINF",  # Replace with actual FRED series IDs
-    "TX": "TXINF",
-    "NY": "NYINF",
-    # Add all states...
+from __future__ import annotations
+from pathlib import Path
+import os, re, sys, time
+from datetime import datetime
+import requests
+import pandas as pd
+
+# ------------------------------- Config ---------------------------------------
+
+STATE_ABBR = {
+    'AL':'Alabama','AK':'Alaska','AZ':'Arizona','AR':'Arkansas','CA':'California','CO':'Colorado',
+    'CT':'Connecticut','DE':'Delaware','FL':'Florida','GA':'Georgia','HI':'Hawaii','ID':'Idaho',
+    'IL':'Illinois','IN':'Indiana','IA':'Iowa','KS':'Kansas','KY':'Kentucky','LA':'Louisiana',
+    'ME':'Maine','MD':'Maryland','MA':'Massachusetts','MI':'Michigan','MN':'Minnesota','MS':'Mississippi',
+    'MO':'Missouri','MT':'Montana','NE':'Nebraska','NV':'Nevada','NH':'New Hampshire','NJ':'New Jersey',
+    'NM':'New Mexico','NY':'New York','NC':'North Carolina','ND':'North Dakota','OH':'Ohio','OK':'Oklahoma',
+    'OR':'Oregon','PA':'Pennsylvania','RI':'Rhode Island','SC':'South Carolina','SD':'South Dakota',
+    'TN':'Tennessee','TX':'Texas','UT':'Utah','VT':'Vermont','VA':'Virginia','WA':'Washington',
+    'WV':'West Virginia','WI':'Wisconsin','WY':'Wyoming','DC':'District of Columbia'
 }
 
-# Load SVG template
-with open("us-map-template.svg", "r", encoding="utf-8") as f:
-    svg_content = f.read()
+FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 
-# Fetch latest inflation for each state
-for state, series_id in STATE_SERIES.items():
-    params = {
-        "series_id": series_id,
-        "api_key": FRED_API_KEY,
-        "file_type": "json"
-    }
-    r = requests.get(FRED_BASE_URL, params=params)
-    data = r.json()
-    if "observations" in data and data["observations"]:
-        latest = data["observations"][-1]["value"]
-        svg_content = svg_content.replace(
-            f'id="{state}"',
-            f'id="{state}" data-inflation="{latest}%"'
-        )
-
-# Wrap SVG in HTML
-html_template = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>US Inflation Map</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<h1>US Inflation by State</h1>
-<div class="map-container">
-{svg_content}
-</div>
-<div id="tooltip"></div>
-<script src="tooltip.js"></script>
-</body>
-</html>
+CSS_SNIPPET = """
+/* === Added by update_page.py (no-JS choropleth) === */
+.state path{stroke:#FFFFFF;stroke-width:1;transition:fill .2s ease, stroke .2s ease}
+.state path:hover{stroke:#0a3f36;stroke-width:1.5}
+.c0{fill:#e8ecea}
+.c1{fill:#d6efe3}
+.c2{fill:#bde4d6}
+.c3{fill:#9fd6c5}
+.c4{fill:#7cc5b1}
+.c5{fill:#55b29a}
 """
 
-# Save HTML
-with open("index.html", "w", encoding="utf-8") as f:
-    f.write(html_template)
 
-print(f"Map updated: {datetime.now()}")
+MARKER_START = r"<!--\s*MAP_SVG_START\s*-->"
+MARKER_END   = r"<!--\s*MAP_SVG_END\s*-->"
+
+# ------------------------------ Helpers ---------------------------------------
+
+def series_id_for_state(abbr: str, seasonal: str) -> str:
+    return f"{abbr.upper()}UR" if seasonal.upper() == "SA" else f"{abbr.upper()}URN"
+
+def fetch_latest_rates(seasonal: str = "SA", api_key: str | None = None, timeout=20) -> pd.DataFrame:
+    api_key = api_key or os.environ.get("FRED_API_KEY")
+    if not api_key:
+        print("ERROR: Set FRED_API_KEY or pass --key", file=sys.stderr)
+        sys.exit(1)
+
+    rows = []
+    for abbr in STATE_ABBR.keys():
+        sid = series_id_for_state(abbr, seasonal)
+        params = {"series_id": sid, "api_key": api_key, "file_type": "json", "sort_order": "desc", "limit": 1}
+        try:
+            r = requests.get(FRED_BASE, params=params, timeout=timeout)
+            r.raise_for_status()
+            data = r.json()
+            obs = (data.get("observations") or [])
+            if obs:
+                o = obs[0]
+                date = pd.to_datetime(o.get("date"), errors="coerce")
+                val = o.get("value")
+                rate = float(val) if val not in ("", ".", None) else float("nan")
+                rows.append({"state": abbr, "date": date, "rate": rate})
+            else:
+                rows.append({"state": abbr, "date": pd.NaT, "rate": float("nan")})
+        except Exception as e:
+            print(f"Warn: {abbr} fetch failed: {e}", file=sys.stderr)
+            rows.append({"state": abbr, "date": pd.NaT, "rate": float("nan")})
+        time.sleep(0.08)
+    return pd.DataFrame(rows).sort_values("state")
+
+def pct(x): 
+    return f"{x:.1f}%" if pd.notnull(x) else "—"
+
+def quantile_bins(s: pd.Series):
+    s = s.dropna()
+    qs = s.quantile([0.2,0.4,0.6,0.8]).tolist() if len(s) >= 5 else [s.min(), s.min(), s.mean(), s.max()]
+    q1,q2,q3,q4 = qs
+    def cls(v):
+        if pd.isna(v): return "c0"
+        if v <= q1: return "c1"
+        if v <= q2: return "c2"
+        if v <= q3: return "c3"
+        if v <= q4: return "c4"
+        return "c5"
+    return cls, (s.min(), q1, q2, q3, q4, s.max())
+
+def enhance_svg(svg_text: str, latest_df: pd.DataFrame) -> str:
+    """Insert classes + data-rate + <title> into the SVG, and append CSS into the first <style>."""
+    rates = {row.state: float(row.rate) for _, row in latest_df.iterrows()}
+    classify, _ = quantile_bins(latest_df["rate"])
+
+    # Work inside <g class="state">...</g>
+    g_pat = re.compile(r'(<g\s+class="state"[^>]*>)(.*?)(</g>)', re.DOTALL)
+    m = g_pat.search(svg_text)
+    if not m:
+        return svg_text
+    head, body, tail = m.group(1), m.group(2), m.group(3)
+
+    def repl_path(pm):
+        full = pm.group(0)
+        cls_attr = pm.group("cls")         # e.g., 'al'
+        rest_cls = pm.group("rest") or ""  # keep any extra classes
+        abbr = cls_attr.upper()
+        name = STATE_ABBR.get(abbr, abbr)
+        r = rates.get(abbr)
+        r_str = f"{r:.1f}" if r is not None and pd.notnull(r) else ""
+        bucket = classify(r)
+
+        # class
+        full = re.sub(r'class="[^"]*"', f'class="{cls_attr}{rest_cls} {bucket}"', full, count=1)
+
+        # data-rate
+        if 'data-rate="' in full:
+            full = re.sub(r'data-rate="[^"]*"', f'data-rate="{r_str}"', full, count=1)
+        else:
+            full = full.replace("<path", f'<path data-rate="{r_str}"', 1)
+
+        # title (tooltip)
+        full = re.sub(
+            r'(<path[^>]*>)(\s*<title>.*?</title>)?',
+            rf'\1<title>{name} — {pct(r)}</title>',
+            full, flags=re.DOTALL
+        )
+        return full
+
+    # Match each state path whose class begins with two lowercase letters
+    path_pat = re.compile(
+        r'<path\s+(?P<classattr>class="(?P<cls>[a-z]{2})(?P<rest>[^"]*)")(?P<attrs>[^>]*)>.*?</path>',
+        re.DOTALL
+    )
+    body = re.sub(path_pat, repl_path, body)
+    svg_text = svg_text[:m.start()] + head + body + tail + svg_text[m.end():]
+
+    # Append our CSS into the first <style> block if present, else inject new <style> in <defs>
+    if re.search(r'<style[^>]*>.*?</style>', svg_text, flags=re.DOTALL):
+        svg_text = re.sub(
+            r'(<style[^>]*>)(.*?)(</style>)',
+            lambda sm: sm.group(1) + sm.group(2) + CSS_SNIPPET + sm.group(3),
+            svg_text, count=1, flags=re.DOTALL
+        )
+    else:
+        svg_text = re.sub(
+            r'(<defs[^>]*>)(.*?)</defs>',
+            lambda dm: dm.group(1) + (dm.group(2) or "") + f'\n<style type="text/css">{CSS_SNIPPET}\n</style>\n</defs>',
+            svg_text, count=1, flags=re.DOTALL
+        )
+    return svg_text
+
+def replace_svg_in_html(html_text: str, new_svg: str) -> str:
+    """Replace SVG in HTML either between markers or the first <svg>…</svg> block."""
+    # Prefer markers if they exist
+    start = re.search(MARKER_START, html_text)
+    end = re.search(MARKER_END, html_text)
+    if start and end and start.end() < end.start():
+        before = html_text[:start.end()]
+        after  = html_text[end.start():]
+        # drop any existing <svg>…</svg> between markers
+        middle = re.sub(r'<svg\b.*?</svg>', '', html_text[start.end():end.start()], flags=re.DOTALL|re.IGNORECASE)
+        return before + "\n" + new_svg + "\n" + after
+
+    # Fallback: replace the first <svg>…</svg> occurrence
+    return re.sub(r'<svg\b.*?</svg>', new_svg, html_text, count=1, flags=re.DOTALL|re.IGNORECASE)
+
+def update_meta_in_html(html_text: str, seasonal: str, refreshed_str: str) -> str:
+    # seasonality badge (if present)
+    sa_label = "Seasonally Adjusted" if seasonal.upper()=="SA" else "Not Seasonally Adjusted"
+    html_text = re.sub(
+        r'(<span[^>]+id=["\']seasonality["\'][^>]*>)(.*?)(</span>)',
+        rf'\1{sa_label}\3', html_text, flags=re.DOTALL
+    )
+    # refreshed timestamp (if present)
+    html_text = re.sub(
+        r'(<span[^>]+id=["\']refreshed["\'][^>]*>)(.*?)(</span>)',
+        rf'\1Refreshed: {refreshed_str}\3', html_text, flags=re.DOTALL
+    )
+    return html_text
+
+# ------------------------------- Main -----------------------------------------
+
+def main(svg_path: Path, html_path: Path, seasonal: str, api_key: str | None):
+    seasonal = seasonal.upper()
+    if seasonal not in ("SA","NSA"):
+        print("seasonal must be SA or NSA", file=sys.stderr); sys.exit(2)
+
+    # 1) Get latest rates
+    df = fetch_latest_rates(seasonal=seasonal, api_key=api_key)
+    print("Latest FRED month:", pd.to_datetime(df["date"].max()).date())
+
+    # 2) Enhance the SVG
+    svg_text = svg_path.read_text(encoding="utf-8")
+    svg_enhanced = enhance_svg(svg_text, df)
+
+    # 3) Load HTML and replace SVG (and update meta labels if present)
+    html_text = html_path.read_text(encoding="utf-8")
+    html_updated = replace_svg_in_html(html_text, svg_enhanced)
+
+    refreshed = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    html_updated = update_meta_in_html(html_updated, seasonal, refreshed)
+
+    # 4) Save backup and write
+    backup = html_path.with_suffix(html_path.suffix + ".bak")
+    backup.write_text(html_text, encoding="utf-8")
+    html_path.write_text(html_updated, encoding="utf-8")
+    print(f"✓ Updated {html_path} (backup at {backup})")
+
+if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--svg", required=True, help="Path to your source SVG (the one you pasted)")
+    ap.add_argument("--html", required=True, help="Path to your existing HTML (e.g., docs/index.html)")
+    ap.add_argument("--seasonal", default="SA", help="SA (seasonally adjusted) or NSA (not seasonally adjusted)")
+    ap.add_argument("--key", default=None, help="(Optional) FRED API key (LOCAL TEST ONLY; prefer env var)")
+    args = ap.parse_args()
+    main(Path(args.svg), Path(args.html), args.seasonal, args.key)
