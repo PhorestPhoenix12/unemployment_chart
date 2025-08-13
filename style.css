@@ -1,30 +1,92 @@
-body {
-  font-family: Arial, sans-serif;
-  text-align: center;
+/* Base layout */
+:root{
+  --bg:#0f172a;          /* slate-900 */
+  --card:#111827;        /* gray-900 */
+  --muted:#9ca3af;       /* gray-400 */
+  --text:#e5e7eb;        /* gray-200 */
+  --accent:#10b981;      /* emerald-500 */
+  --border:#1f2937;      /* gray-800 */
+
+  --radius:16px;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
 }
 
-.map-container {
-  max-width: 900px;
-  margin: auto;
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body{
+  margin:0;
+  background: linear-gradient(180deg, #0b1220, #0d1628 40%, #0f172a);
+  color:var(--text);
+  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
 }
 
-.state {
-  fill: #d9e6f2;
-  stroke: #333;
-  cursor: pointer;
-  transition: fill 0.2s;
+/* Header */
+.site-header{
+  max-width:1100px; margin:32px auto 8px; padding:0 16px;
+  display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+}
+.site-header h1{ font-size: clamp(1.4rem, 2.7vw, 2rem); margin:0; }
+.meta{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.badge{
+  background: rgba(16,185,129,.12); color:#a7f3d0;
+  border:1px solid rgba(16,185,129,.3);
+  padding:4px 8px; border-radius:999px; font-size:.9rem;
+}
+.muted{ color:var(--muted); font-size:.9rem; }
+
+/* Container & cards */
+.container{ max-width:1100px; margin:0 auto 40px; padding:0 16px; }
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding:16px;
+  margin:16px 0;
+}
+.card-head h2{ margin:4px 0 12px; font-size:1.1rem; color:#d1fae5; }
+.notes h3{ margin:0 0 8px; font-size:1rem; color:#c7d2fe; }
+
+/* Map container */
+.map-card svg{
+  width:100%;
+  height:auto;
+  display:block;
+  border-radius: calc(var(--radius) - 4px);
+  background: radial-gradient(1200px 600px at 50% -300px, rgba(16,185,129,.10), transparent 60%);
 }
 
-.state:hover {
-  fill: #ffcc00;
+/* Legend */
+.legend{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  margin-top:12px; color:#cbd5e1;
+}
+.legend .swatch{
+  width:18px; height:12px; border-radius:3px; display:inline-block;
+  border:1px solid rgba(0,0,0,.15);
+}
+.legend .lbl{ font-size:.9rem; color:var(--muted); }
+
+/* Tooltip/hover styling for paths is injected by Python too; keep in sync */
+.state path{stroke:#FFFFFF;stroke-width:1;transition:fill .2s ease, stroke .2s ease}
+.state path:hover{stroke:#0a3f36;stroke-width:1.5}
+
+/* Choropleth palette (matches the Python CSS_SNIPPET) */
+.c0{fill:#e8ecea} /* no data */
+.c1{fill:#d6efe3}
+.c2{fill:#bde4d6}
+.c3{fill:#9fd6c5}
+.c4{fill:#7cc5b1}
+.c5{fill:#55b29a}
+
+/* Footer */
+.site-footer{
+  max-width:1100px; margin:16px auto 48px; padding:0 16px;
+  color:var(--muted); text-align:center;
 }
 
-#tooltip {
-  position: absolute;
-  padding: 6px;
-  background: white;
-  border: 1px solid #ccc;
-  display: none;
-  pointer-events: none;
-  font-size: 14px;
+/* Small screens */
+@media (max-width:640px){
+  .site-header{ margin-top:20px; }
+  .legend{ gap:8px; }
 }
