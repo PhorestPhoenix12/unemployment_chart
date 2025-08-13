@@ -1,1 +1,30 @@
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
 
+.map-container {
+  max-width: 900px;
+  margin: auto;
+}
+
+.state {
+  fill: #d9e6f2;
+  stroke: #333;
+  cursor: pointer;
+  transition: fill 0.2s;
+}
+
+.state:hover {
+  fill: #ffcc00;
+}
+
+#tooltip {
+  position: absolute;
+  padding: 6px;
+  background: white;
+  border: 1px solid #ccc;
+  display: none;
+  pointer-events: none;
+  font-size: 14px;
+}
