@@ -22,8 +22,7 @@
       </div>
 
       <!-- MAP_SVG_START -->
-      <!-- The Python script will replace everything between these markers
-           with the enhanced <svg> that includes data-rate and <title> tooltips. -->
+      <!-- The Python script will inject the enhanced <svg> between these markers. -->
       <div class="placeholder">
         <p>Map will appear here after running <code>update_page.py</code>.</p>
       </div>
@@ -35,15 +34,16 @@
         <span class="swatch c3" aria-hidden="true"></span>
         <span class="swatch c4" aria-hidden="true"></span>
         <span class="swatch c5" aria-hidden="true"></span><span class="lbl">Highest</span>
-        <span class="swatch c0" aria-hidden="true" title="No data"></span><span class="lbl">No data</span>
+        <span class="swatch c0" aria-hidden="true"></span><span class="lbl">No data</span>
       </figcaption>
     </section>
 
-    <section class="card notes">
+    <section class="about">
       <h3>About</h3>
       <p>
-        Data source: FRED (Unemployment Rate by State). Colors are quantile buckets computed at build time
-        by <code>update_page.py</code>. Hover a state to see the current rate in the native tooltip.
+        Data source: FRED (Unemployment Rate by State). Colors are quantile
+        buckets computed at build time by <code>update_page.py</code>.
+        Hover a state to see the current rate in the native tooltip.
       </p>
     </section>
   </main>
