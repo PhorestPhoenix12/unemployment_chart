@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>US Unemployment Rate — Hover Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>US Unemployment Rate</h1>
+    <div class="meta">
+      <span id="seasonality" class="badge">Seasonally Adjusted</span>
+      <span id="refreshed" class="muted">Refreshed: —</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card map-card">
+      <div class="card-head">
+        <h2>Hover a state to see the latest rate</h2>
+      </div>
+
+      <!-- MAP_SVG_START -->
+      <!-- The Python script will inject the enhanced <svg> between these markers. -->
+      <div class="placeholder">
+        <p>Map will appear here after running <code>update_page.py</code>.</p>
+      </div>
+      <!-- MAP_SVG_END -->
+
+      <figcaption class="legend" aria-label="Legend">
+        <span class="swatch c1" aria-hidden="true"></span><span class="lbl">Lowest</span>
+        <span class="swatch c2" aria-hidden="true"></span>
+        <span class="swatch c3" aria-hidden="true"></span>
+        <span class="swatch c4" aria-hidden="true"></span>
+        <span class="swatch c5" aria-hidden="true"></span><span class="lbl">Highest</span>
+        <span class="swatch c0" aria-hidden="true"></span><span class="lbl">No data</span>
+      </figcaption>
+    </section>
+
+    <section class="about">
+      <h3>About</h3>
+      <p>
+        Data source: FRED (Unemployment Rate by State). Colors are quantile
+        buckets computed at build time by <code>update_page.py</code>.
+        Hover a state to see the current rate in the native tooltip.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <small>© Your Name • Built with Python, HTML &amp; CSS • No JS required</small>
+  </footer>
+</body>
+</html>
+
