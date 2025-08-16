@@ -187,6 +187,60 @@ def update_meta_in_html(html_text: str, seasonal: str, refreshed_str: str) -> st
     )
     return html_text
 
+
+# --- ADD: fetch time-history and save to JSON -------------------------------
+import json
+
+def fetch_history_rates(seasonal: str = "SA", api_key: str | None = None,
+                        start="2010-01-01", timeout=20) -> list[dict]:
+    """
+    Returns a list of frames: [{"date":"YYYY-MM-01","rates":{"AL":x,"AK":...}}, ...]
+    covering all months from `start` through the latest, using FRED state series.
+    """
+    api_key = api_key or os.environ.get("FRED_API_KEY")
+    if not api_key:
+        print("ERROR: Set FRED_API_KEY or pass --key", file=sys.stderr)
+        sys.exit(1)
+
+    # Pull each state's full history since `start`
+    per_state = {}
+    for abbr in STATE_ABBR.keys():
+        sid = series_id_for_state(abbr, seasonal)
+        params = {
+            "series_id": sid, "api_key": api_key, "file_type": "json",
+            "observation_start": start, "sort_order": "asc"
+        }
+        try:
+            r = requests.get(FRED_BASE, params=params, timeout=timeout)
+            r.raise_for_status()
+            data = r.json()
+            obs = (data.get("observations") or [])
+            per_state[abbr] = {
+                o["date"]: (float(o["value"]) if o.get("value") not in ("", ".", None) else float("nan"))
+                for o in obs
+            }
+        except Exception as e:
+            print(f"Warn: {abbr} history fetch failed: {e}", file=sys.stderr)
+            per_state[abbr] = {}
+
+        time.sleep(0.08)
+
+    # Build frames by date
+    all_dates = sorted({d for dmap in per_state.values() for d in dmap.keys()})
+    frames = []
+    for d in all_dates:
+        frames.append({
+            "date": d,
+            "rates": {abbr: per_state.get(abbr, {}).get(d, float("nan")) for abbr in STATE_ABBR.keys()}
+        })
+    return frames
+
+def write_history_json(frames: list[dict], seasonal: str, out_path: Path):
+    payload = {"seasonal": seasonal.upper(), "frames": frames}
+    # write next to index.html by default (root)
+    out_path.write_text(json.dumps(payload), encoding="utf-8")
+    print(f"✓ Wrote history JSON: {out_path}")
+
 # ------------------------------- Main -----------------------------------------
 
 def main(svg_path: Path, html_path: Path, seasonal: str, api_key: str | None):
@@ -213,6 +267,14 @@ def main(svg_path: Path, html_path: Path, seasonal: str, api_key: str | None):
     backup.write_text(html_text, encoding="utf-8")
     html_path.write_text(html_updated, encoding="utf-8")
     print(f"✓ Updated {html_path} (backup at {backup})")
+
+    # (existing) df = fetch_latest_rates(...)
+    # ...
+    # After writing HTML:
+    # 5) (NEW) write history JSON for the slider (last 15 years is a good default)
+    frames = fetch_history_rates(seasonal=seasonal, api_key=api_key, start="2010-01-01")
+    history_json = html_path.parent / "unemployment_history.json"
+    write_history_json(frames, seasonal, history_json)
 
 if __name__ == "__main__":
     import argparse
